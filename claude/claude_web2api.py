@@ -192,9 +192,14 @@ def parse_tool_calls(text):
     """Detect tool invocation patterns in Claude's text response.
     Returns list of (name, args_json_str) or empty list."""
     results = []
-    # Pattern 1: <invoke tool="NAME">\nARGS_JSON\n</invoke>
-    for m in re.finditer(r'<invoke\s+tool="([^"]+)"\s*>\s*\n?(\{.*?\})\s*\n?</invoke>', text, re.DOTALL):
-        results.append((m.group(1), m.group(2)))
+    # Pattern 1: <invoke tool="NAME">ANYTHING</invoke>
+    for m in re.finditer(r'<invoke\s+tool="([^"]+)"\s*>(.*?)</invoke>', text, re.DOTALL):
+        args_str = m.group(2).strip()
+        try:
+            json.loads(args_str)  # validate it's valid JSON
+            results.append((m.group(1), args_str))
+        except json.JSONDecodeError:
+            pass
     if results:
         return results
     # Pattern 2: <atml:invoke name="NAME">...<atml:parameter name="P">V</atml:parameter>...</atml:invoke>
@@ -299,7 +304,6 @@ class ClaudeProxyHandler(BaseHTTPRequestHandler):
 
         stream = req.get("stream", False)
 
-        global ORGANIZATION_ID
         if not ORGANIZATION_ID:
             try:
                 ORGANIZATION_ID = get_organization_id()
@@ -384,33 +388,36 @@ class ClaudeProxyHandler(BaseHTTPRequestHandler):
         completion_id = f"chatcmpl-{uuid.uuid4().hex}"
         created = int(time.time())
         buf = ""
-        tool_call = None
 
-        for line in iter_sse_lines(upstream):
-            if not line or not line.startswith("data: "):
-                continue
-            try:
-                data = json.loads(line[6:])
-            except:
-                continue
+        try:
+            for line in iter_sse_lines(upstream):
+                if not line or not line.startswith("data: "):
+                    continue
+                try:
+                    data = json.loads(line[6:])
+                except:
+                    continue
 
-            if data.get("type") == "completion":
-                text = data.get("completion", "")
-                if text:
-                    buf += text
-            elif data.get("type") == "error":
-                log(f"upstream SSE error: {data}")
-                self._sse_error(data.get("message", str(data)))
-                self.close_connection = True
-                return
-            elif data.get("type") in ("message_stop", "stop"):
-                break
-            elif data.get("type") == "content_block_delta":
-                text = data.get("delta", {}).get("text", "")
-                if text:
-                    buf += text
-            else:
-                log(f"debug: unknown event type {data.get('type')}: {data}")
+                if data.get("type") == "completion":
+                    text = data.get("completion", "")
+                    if text:
+                        buf += text
+                elif data.get("type") == "error":
+                    log(f"upstream SSE error: {data}")
+                    self._sse_error(data.get("message", str(data)))
+                    return
+                elif data.get("type") in ("message_stop", "stop"):
+                    break
+                elif data.get("type") == "content_block_delta":
+                    text = data.get("delta", {}).get("text", "")
+                    if text:
+                        buf += text
+                else:
+                    log(f"debug: unknown event type {data.get('type')}: {data}")
+        except Exception as e:
+            log(f"stream error: {e}")
+            self._sse_error(str(e))
+            return
 
         # Check for tool invocations in Claude's response
         if buf:
@@ -494,6 +501,10 @@ class ClaudeProxyHandler(BaseHTTPRequestHandler):
                 continue
             if data.get("type") == "completion":
                 content_parts.append(data.get("completion", ""))
+            elif data.get("type") == "content_block_delta":
+                text = data.get("delta", {}).get("text", "")
+                if text:
+                    content_parts.append(text)
             elif data.get("type") == "error":
                 log(f"upstream error: {data}")
                 self._json_response(502, {"error": data.get("message", str(data))})
