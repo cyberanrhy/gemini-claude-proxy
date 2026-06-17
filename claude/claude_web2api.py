@@ -323,10 +323,7 @@ class ClaudeProxyHandler(BaseHTTPRequestHandler):
                 log(f"organization_id fetched on-demand: {ORGANIZATION_ID}")
             except Exception as e:
                 log(f"on-demand org fetch failed: {e}")
-                if not stream:
-                    self._json_response(503, {"error": "could not fetch organization id"})
-                else:
-                    self._sse_error(f"could not fetch org id: {e}")
+                self._json_response(503, {"error": f"could not fetch organization id: {e}"})
                 return
 
         messages = req.get("messages", [])
@@ -340,10 +337,7 @@ class ClaudeProxyHandler(BaseHTTPRequestHandler):
 
         chat_id = create_chat(ORGANIZATION_ID)
         if not chat_id:
-            if not stream:
-                self._json_response(502, {"error": "failed to create chat"})
-            else:
-                self._sse_error("failed to create chat")
+            self._json_response(502, {"error": "failed to create chat"})
             return
 
         try:
@@ -367,12 +361,15 @@ class ClaudeProxyHandler(BaseHTTPRequestHandler):
                 json=payload, headers=headers, stream=True, timeout=240)
 
             if upstream.status_code != 200:
-                err_text = upstream.text[:200]
+                err_text = upstream.text[:300]
                 log(f"upstream error: {upstream.status_code} {err_text}")
-                if stream:
-                    self._sse_error(f"upstream error {upstream.status_code}")
-                else:
-                    self._json_response(502, {"error": f"upstream error {upstream.status_code}", "detail": err_text})
+                detail = err_text
+                try:
+                    err_body = json.loads(upstream.text)
+                    detail = err_body.get("error", {}).get("message", err_text)
+                except:
+                    pass
+                self._json_response(502, {"error": f"upstream error {upstream.status_code}", "detail": detail})
                 return
 
             # Send SSE headers only after upstream is confirmed working
@@ -385,10 +382,7 @@ class ClaudeProxyHandler(BaseHTTPRequestHandler):
         except Exception as e:
             log(f"request error: {e}")
             try:
-                if stream:
-                    self._sse_error(str(e))
-                else:
-                    self._json_response(502, {"error": str(e)})
+                self._json_response(502, {"error": str(e)})
             except:
                 pass
         finally:
