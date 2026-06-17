@@ -49,12 +49,25 @@ def load_cookies():
     return bool(cookies)
 
 def _session():
-    s = Session(impersonate="chrome110")
+    if sys.platform == "win32":
+        _platform = "Windows"
+        _ua_os = "Windows NT 10.0; Win64; x64"
+    elif sys.platform == "darwin":
+        _platform = "macOS"
+        _ua_os = "Macintosh; Intel Mac OS X 10_15_7"
+    else:
+        _platform = "Linux"
+        _ua_os = "X11; Linux x86_64"
+    s = Session(impersonate="chrome146")
     s.headers.update({
         "User-Agent": CONFIG.get("user_agent",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"),
+            f"Mozilla/5.0 ({_ua_os}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"),
         "Accept-Language": "en-US,en;q=0.5",
         "DNT": "1",
+        "sec-ch-ua": '"Chromium";v="146", "Not:A-Brand";v="24", "Google Chrome";v="146"',
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": _platform,
+        "Accept-Encoding": "gzip, deflate, br, zstd",
     })
     if CONFIG.get("proxy"):
         s.proxies = {"http": CONFIG["proxy"], "https": CONFIG["proxy"]}
