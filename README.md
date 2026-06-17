@@ -100,9 +100,19 @@ curl http://localhost:8082/v1/chat/completions \
   -d '{"model":"claude-haiku-4-5-20251001","messages":[{"role":"user","content":"Hello"}]}'
 ```
 
-### With OpenCode
+### With [OpenCode](https://opencode.ai)
 
-Add to your OpenCode config (`~/.config/opencode/opencode.json` or `%APPDATA%\opencode\opencode.json`):
+OpenCode is an open-source AI coding agent. This guide shows how to use our proxies as local providers.
+
+#### Quick setup
+
+Copy the following block into your OpenCode config file:
+
+| OS | Config file path |
+|---|---|
+| Linux/macOS | `~/.config/opencode/opencode.json` |
+| Windows (CLI) | `%USERPROFILE%\.config\opencode\opencode.jsonc` |
+| Windows (Desktop) | `%APPDATA%\opencode\opencode.json` |
 
 ```json
 {
@@ -112,12 +122,15 @@ Add to your OpenCode config (`~/.config/opencode/opencode.json` or `%APPDATA%\op
       "name": "Gemini Local",
       "options": {
         "baseURL": "http://localhost:8081/v1",
-        "apiKey": "sk-proxy"
+        "apiKey": "sk-proxy",
+        "timeout": 120000
       },
       "models": {
         "gemini-3.5-flash": { "name": "Gemini 3.5 Flash" },
         "gemini-3.5-flash-thinking": { "name": "Gemini 3.5 Flash Thinking" },
-        "gemini-flash-lite": { "name": "Gemini Flash Lite" }
+        "gemini-flash-lite": { "name": "Gemini Flash Lite" },
+        "gemini-pro": { "name": "Gemini Pro" },
+        "gemini-auto": { "name": "Gemini Auto" }
       }
     },
     "claude-local": {
@@ -125,18 +138,60 @@ Add to your OpenCode config (`~/.config/opencode/opencode.json` or `%APPDATA%\op
       "name": "Claude Local",
       "options": {
         "baseURL": "http://localhost:8082/v1",
-        "apiKey": "sk-proxy"
+        "apiKey": "sk-proxy",
+        "timeout": 120000
       },
       "models": {
-        "claude-3-5-sonnet-20241022": { "name": "Claude 3.5 Sonnet" },
-        "claude-3-5-haiku-20241022": { "name": "Claude 3.5 Haiku" },
-        "claude-3-opus-20240229": { "name": "Claude 3 Opus" },
-        "claude-haiku-4-5-20251001": { "name": "Claude Haiku 4.5" }
+        "claude-haiku-4-5-20251001": { "name": "Claude Haiku 4.5", "limit": { "context": 200000, "output": 64000 } },
+        "claude-3-5-sonnet-20241022": { "name": "Claude 3.5 Sonnet", "limit": { "context": 200000, "output": 8192 } },
+        "claude-3-5-haiku-20241022": { "name": "Claude 3.5 Haiku", "limit": { "context": 200000, "output": 8192 } },
+        "claude-3-opus-20240229": { "name": "Claude 3 Opus", "limit": { "context": 200000, "output": 4096 } }
       }
     }
   }
 }
 ```
+
+After adding, restart OpenCode and select a model from the provider picker.
+
+> **Tip:** If you don't see the provider, restart OpenCode Desktop completely (File → Quit, not just close the window).
+
+#### Set as default model
+
+To make a local provider your default, add/change the `model` and `small_model` fields:
+
+```json
+{
+  "model": "gemini-local/gemini-3.5-flash",
+  "small_model": "claude-local/claude-haiku-4-5-20251001"
+}
+```
+
+| Field | Purpose | Recommended |
+|---|---|---|
+| `model` | Main agent (full tool support) | `gemini-local/gemini-3.5-flash-thinking` |
+| `small_model` | Quick/simple queries | `claude-local/claude-haiku-4-5-20251001` or `gemini-local/gemini-flash-lite` |
+
+#### Provider comparison
+
+| Feature | Gemini Local | Claude Local |
+|---|---|---|
+| Tool/function calling | ✅ Native | ✅ Via text-to-tool |
+| Streaming | ✅ | ✅ |
+| Context window | ~1M tokens | ~200K tokens |
+| Agentic coding | ✅ Best choice | ⚠️ Chat only (tools work but limited) |
+| Speed | Fast | Fast (Haiku) |
+| Rate limits | Google's (generous) | Claude.ai free tier (~20 msg/day) |
+
+#### Troubleshooting in OpenCode
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `Cannot connect to API` | Proxy not running | Run `start.bat` or `bash start.sh` |
+| `Response does not match HTTP/1.1` | Old proxy bug | Update to latest version |
+| Model picker empty | Config file not read | Check file path from table above |
+| Infinite loading / timeout | Claude rate limited (429) | Wait, check panel logs |
+| `401 Unauthorized` | Cookies expired | Re-export from browser → paste in panel |
 
 ---
 
