@@ -28,6 +28,11 @@ def load_cookies():
     path = CONFIG.get("cookie_file") or os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "cookie_claude.txt")
     if not os.path.exists(path):
+        # Fall back to parent directory (unified repo layout)
+        parent = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "cookie_claude.txt")
+        if os.path.exists(parent):
+            path = parent
+    if not os.path.exists(path):
         log(f"cookie file not found: {path}")
         return False
     cookies = []
