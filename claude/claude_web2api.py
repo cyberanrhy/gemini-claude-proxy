@@ -522,23 +522,18 @@ class ClaudeProxyHandler(BaseHTTPRequestHandler):
                 if upstream.status_code == 429:
                     _last_429_time = time.time()
                     _last_429_message = err_text
-                    # Try to extract reset time from response body
+                    # Parse 429 body: {"error":{"message":"{\"resetsAt\":1781808000,...}"}}
                     try:
                         err_body = json.loads(err_body_bytes.decode(errors="replace"))
-                        msg = err_body.get("error", {}).get("message", "")
+                        err_inner = err_body.get("error", {})
+                        msg = err_inner.get("message", "")
                         if msg:
                             _last_429_message = msg[:300]
-                        import re
-                        m = re.search(r'(?:reset|retry)\s*(?:at|in|after)?\s*:?\s*(\d{1,2}:\d{2})', msg, re.IGNORECASE)
-                        if m:
-                            from datetime import datetime, timedelta
-                            reset_time = m.group(1)
-                            now = datetime.now()
-                            reset_dt = datetime.strptime(reset_time, "%H:%M").replace(
-                                year=now.year, month=now.month, day=now.day)
-                            if reset_dt <= now:
-                                reset_dt += timedelta(days=1)
-                            _limit_reset_at = reset_dt.timestamp()
+                            # Try to parse inner JSON with resetsAt
+                            inner = json.loads(msg)
+                            ts = inner.get("resetsAt")
+                            if ts:
+                                _limit_reset_at = ts
                     except:
                         pass
                 detail = err_text
