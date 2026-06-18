@@ -319,12 +319,12 @@ def run_health_test(name):
 
 
 def parse_cookie_expiry(filepath):
-    """Extearct cookie expiry dates from Netscape cookie file. Return days until nearest expiry."""
+    """Parse cookie file, return {hours, days} until nearest cookie expiry (>1h)."""
     if not os.path.exists(filepath):
         return None
     try:
         now = time.time()
-        min_days = None
+        min_secs = None
         with open(filepath, "r") as f:
             for line in f:
                 line = line.strip()
@@ -335,12 +335,17 @@ def parse_cookie_expiry(filepath):
                     try:
                         expiry = int(parts[4])
                         if expiry > now:
-                            days = (expiry - now) / 86400
-                            if min_days is None or days < min_days:
-                                min_days = days
+                            secs = expiry - now
+                            if secs >= 3600:  # skip short-lived (< 1h) cookies
+                                if min_secs is None or secs < min_secs:
+                                    min_secs = secs
                     except (ValueError, IndexError):
                         pass
-        return round(min_days, 1) if min_days is not None else None
+        if min_secs is None:
+            return None
+        hours = round(min_secs / 3600, 1)
+        days = round(min_secs / 86400, 1)
+        return {"hours": hours, "days": days}
     except Exception:
         return None
 
@@ -640,8 +645,13 @@ class PanelHandler(http.server.BaseHTTPRequestHandler):
             claude_rt = round(time.time() - t0, 3)
             claude_alive = code == 200
 
-        gemini_cookie_expiry = parse_cookie_expiry(GEMINI_COOKIE_FILE)
-        claude_cookie_expiry = parse_cookie_expiry(CLAUDE_COOKIE_FILE)
+        gemini_cookie = parse_cookie_expiry(GEMINI_COOKIE_FILE)
+        claude_cookie = parse_cookie_expiry(CLAUDE_COOKIE_FILE)
+
+        gemini_cookie_expiry = gemini_cookie["days"] if gemini_cookie else None
+        gemini_cookie_hours = gemini_cookie["hours"] if gemini_cookie else None
+        claude_cookie_expiry = claude_cookie["days"] if claude_cookie else None
+        claude_cookie_hours = claude_cookie["hours"] if claude_cookie else None
         gemini_proxy = read_config("gemini")
         claude_proxy = read_config("claude")
 
@@ -661,6 +671,7 @@ class PanelHandler(http.server.BaseHTTPRequestHandler):
                 "port": GEMINI_PORT,
                 "response_time": gemini_rt,
                 "cookie_expiry_days": gemini_cookie_expiry,
+                "cookie_expiry_hours": gemini_cookie_hours,
                 "log_exists": os.path.exists(GEMINI_LOG),
                 "proxy": gemini_proxy,
             },
@@ -670,6 +681,7 @@ class PanelHandler(http.server.BaseHTTPRequestHandler):
                 "port": CLAUDE_PORT,
                 "response_time": claude_rt,
                 "cookie_expiry_days": claude_cookie_expiry,
+                "cookie_expiry_hours": claude_cookie_hours,
                 "log_exists": os.path.exists(CLAUDE_LOG),
                 "proxy": claude_proxy,
                 "usage": claude_usage,
@@ -1250,11 +1262,18 @@ async function fetchStatus(){
       if(missingDiv) missingDiv.style.display='none';
     }
     
-    if(s.installed && s.cookie_expiry_days !== null && s.cookie_expiry_days !== undefined){
+    if(s.installed && s.cookie_expiry_hours !== null && s.cookie_expiry_hours !== undefined){
+      const h = s.cookie_expiry_hours;
+      let color = '#0f0';
+      if(h < 3) color = '#f00';
+      else if(h < 12) color = '#fa0';
+      ck.textContent = '~' + Math.round(h) + 'h';
+      ck.style.color = color;
+    } else if(s.installed && s.cookie_expiry_days !== null && s.cookie_expiry_days !== undefined){
       const d = s.cookie_expiry_days;
       let color = '#0f0';
-      if(d < 7) color = '#fa0';
       if(d < 3) color = '#f00';
+      else if(d < 7) color = '#fa0';
       ck.textContent = d + ' ' + t('days');
       ck.style.color = color;
     } else if(s.installed) {
