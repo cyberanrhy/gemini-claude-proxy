@@ -345,9 +345,26 @@ def parse_cookie_expiry(filepath):
         return None
 
 
+def _ensure_config(name):
+    """Create config.json from config.example.json if missing."""
+    proxy_dir = GEMINI_DIR if name == "gemini" else CLAUDE_DIR
+    config_file = os.path.join(proxy_dir, "config.json")
+    if not os.path.exists(config_file):
+        example = os.path.join(proxy_dir, "config.example.json")
+        if os.path.exists(example):
+            try:
+                with open(example) as f:
+                    cfg = json.load(f)
+                with open(config_file, "w") as f:
+                    json.dump(cfg, f, indent=2)
+            except Exception:
+                pass
+    return config_file
+
+
 def read_config(name):
     """Read proxy config.json and return proxy value."""
-    config_file = os.path.join(GEMINI_DIR if name == "gemini" else CLAUDE_DIR, "config.json")
+    config_file = _ensure_config(name)
     if not os.path.exists(config_file):
         return None
     try:
@@ -360,7 +377,7 @@ def read_config(name):
 
 def write_config(name, proxy_val):
     """Write proxy value to config.json and restart the proxy."""
-    config_file = os.path.join(GEMINI_DIR if name == "gemini" else CLAUDE_DIR, "config.json")
+    config_file = _ensure_config(name)
     if not os.path.exists(config_file):
         return {"success": False, "message": "config.json not found"}
     try:

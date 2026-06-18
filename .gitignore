@@ -3,7 +3,6 @@ cookie*.txt
 
 # Runtime config (user-specific)
 config.json
-!claude/config.json
 
 # Git config
 config
