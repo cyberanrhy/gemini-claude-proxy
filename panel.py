@@ -1446,7 +1446,7 @@ function saveProxy(name){
 applyLang();
 fetchStatus();
 fetchLogs();
-setInterval(fetchStatus, 10000);
+setInterval(fetchStatus, 30000);
 setInterval(fetchLogs, 5000);
 </script>
 </body>
