@@ -1290,7 +1290,13 @@ async function fetchStatus(){
         let txt = cnt + ' / ?';
         let color = '#0f0';
         if(u.last_429_message){
-          txt = '⚠ ' + (u.last_429_message.substring(0, 80));
+          let label = u.last_429_message;
+          try {
+            const parsed = JSON.parse(u.last_429_message);
+            label = parsed.type || parsed.error || 'limit';
+            if(parsed.representativeClaim) label += ' (' + parsed.representativeClaim + ')';
+          } catch(e) {}
+          txt = '⚠ ' + label;
           color = '#f00';
         }
         if(u.limit_reset_at){
