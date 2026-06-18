@@ -177,10 +177,15 @@ def format_prompt(messages, tools=None):
             fn = t.get("function", {})
             name = fn.get("name", "?")
             desc = fn.get("description", "")
-            params = fn.get("parameters", {})
             tool_descs.append(f"  - {name}: {desc}" if desc else f"  - {name}")
-        parts.append(f"You have the following tools available:\n" + "\n".join(tool_descs))
-        parts.append("When you need to perform an action, respond with the appropriate tool call using the <invoke tool=\"NAME\">JSON_ARGS</invoke> format. Use tools whenever possible instead of describing what you would do.")
+        parts.append("AVAILABLE TOOLS:\n" + "\n".join(tool_descs))
+        parts.append(
+            "You MUST invoke tools using this exact format:\n\n"
+            "<invoke tool=\"TOOL_NAME\">\n{\"param1\": \"value1\"}\n</invoke>\n\n"
+            "Example:\n"
+            '<invoke tool="Bash">\n{"command": "ls -la"}\n</invoke>\n\n'
+            "Never describe actions — always use tool invocations."
+        )
     parts.append("Assistant:")
     return "\n\n".join(parts)
 
@@ -337,7 +342,10 @@ class ClaudeProxyHandler(BaseHTTPRequestHandler):
         tools = req.get("tools", [])
         model = req.get("model") or CONFIG.get("model") or "claude"
         prompt = format_prompt(messages, tools)
-        log(f"chat request: model={model}, stream={stream}, messages={len(messages)}")
+        log(f"chat request: model={model}, stream={stream}, messages={len(messages)}, tools={len(tools)}")
+        if tools:
+            log(f"tools: {[t.get('function',{}).get('name','?') for t in tools]}")
+            log(f"prompt (last 500 chars): ...{prompt[-500:]}")
 
         chat_id = create_chat(ORGANIZATION_ID)
         if not chat_id:
@@ -432,6 +440,7 @@ class ClaudeProxyHandler(BaseHTTPRequestHandler):
 
         # Check for tool invocations in Claude's response
         if buf:
+            log(f"Claude raw response (first 500): {buf[:500]}")
             tool_calls = parse_tool_calls(buf)
             if tool_calls:
                 for idx, (name, args_str) in enumerate(tool_calls):
@@ -522,6 +531,8 @@ class ClaudeProxyHandler(BaseHTTPRequestHandler):
                 return
 
         content = "".join(content_parts).strip()
+        if content:
+            log(f"Claude raw response (first 500): {content[:500]}")
 
         # Check for tool invocations
         tool_calls = parse_tool_calls(content)
